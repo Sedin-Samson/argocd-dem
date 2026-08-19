@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Argo CD GitOps Demo</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%);
+      --card-bg: rgba(30, 41, 59, 0.7);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --accent-purple: #8b5cf6;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg-gradient);
+      min-height: 100vh;
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 700px;
+      width: 100%;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 20px;
+      padding: 2.5rem;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .badge-gitops {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(139, 92, 246, 0.15);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #c084fc;
+      padding: 0.4rem 1rem;
+      border-radius: 9999px;
+      font-size: 0.875rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+    }
+
+    h1 {
+      font-size: 2.25rem;
+      font-weight: 700;
+      background: linear-gradient(to right, #60a5fa, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    p.subtitle {
+      color: var(--text-muted);
+      font-size: 1rem;
+    }
+
+    .card {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 500;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      box-shadow: 0 0 8px currentColor;
+    }
+
+    .dot.connected {
+      background: var(--accent-green);
+      color: var(--accent-green);
+    }
+
+    .dot.error {
+      background: #ef4444;
+      color: #ef4444;
+    }
+
+    .api-response {
+      font-family: 'Courier New', Courier, monospace;
+      background: #090d16;
+      border: 1px solid #1e293b;
+      color: #38bdf8;
+      padding: 1.25rem;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .actions {
+      display: flex;
+      gap: 1rem;
+      justify-content: center;
+    }
+
+    button {
+      background: linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-purple) 100%);
+      color: white;
+      border: none;
+      padding: 0.75rem 1.75rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px 0 rgba(59, 130, 246, 0.39);
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px 0 rgba(139, 92, 246, 0.5);
+    }
+
+    .footer-info {
+      text-align: center;
+      margin-top: 1.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <div class="badge-gitops">🚀 Argo CD GitOps Practical Demo</div>
+      <h1>Frontend Web Application</h1>
+      <p class="subtitle">Communicating with Backend Microservice via Kubernetes Service</p>
+    </div>
+
+    <div class="card">
+      <div class="status-row">
+        <span>Backend Connection:</span>
+        <div class="status-indicator">
+          <div id="statusDot" class="dot"></div>
+          <span id="statusText">Connecting...</span>
+        </div>
+      </div>
+
+      <div class="api-response" id="responseBox">Fetching backend data...</div>
+    </div>
+
+    <div class="actions">
+      <button id="refreshBtn" onclick="fetchBackendData()">🔄 Fetch API Data</button>
+    </div>
+
+    <div class="footer-info">
+      Target API Endpoint: <code>/api/hello</code> &nbsp;|&nbsp; Kubernetes Architecture: <code>Frontend → Backend-Service</code>
+    </div>
+  </div>
+
+  <script>
+    async function fetchBackendData() {
+      const dot = document.getElementById('statusDot');
+      const statusText = document.getElementById('statusText');
+      const responseBox = document.getElementById('responseBox');
+
+      statusText.innerText = 'Calling API...';
+      
+      try {
+        // Try calling reverse-proxied /api/hello first, fallback to direct port 8000 if running locally without nginx
+        let response;
+        try {
+          response = await fetch('/api/hello');
+        } catch(e) {
+          response = await fetch('http://localhost:8000/api/hello');
+        }
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        
+        dot.className = 'dot connected';
+        statusText.innerText = 'Healthy (200 OK)';
+        responseBox.innerText = JSON.stringify(data, null, 2);
+      } catch (err) {
+        dot.className = 'dot error';
+        statusText.innerText = 'Failed to reach API';
+        responseBox.innerText = `Error: ${err.message}\n\nMake sure the backend container/service is running and accessible!`;
+      }
+    }
+
+    // Initial fetch on page load
+    fetchBackendData();
+    // Refresh every 10 seconds automatically
+    setInterval(fetchBackendData, 10000);
+  </script>
+
+</body>
+</html>

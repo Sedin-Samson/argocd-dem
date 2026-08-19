@@ -1,0 +1,21 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: argocd-demo-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    # Replace this with your actual Git Repository URL after pushing to GitHub/GitLab
+    repoURL: 'https://github.com/YOUR_GITHUB_USERNAME/argocd-demo.git'
+    targetRevision: HEAD
+    path: 'kubernetes'
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+    - CreateNamespace=true
