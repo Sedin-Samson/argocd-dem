@@ -20,8 +20,8 @@ def read_root():
 @app.get("/api/hello")
 def get_hello():
     return {
-        "message": "Hello from Backend v1",
-        "version": "v1",
+        "message": "Hello from Manual Sync Backend v3",
+        "version": "v3",
         "timestamp": time.time(),
         "status": "success"
     }
