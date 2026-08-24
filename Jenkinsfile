@@ -46,13 +46,15 @@ pipeline {
         stage('Commit & Push Manifest to GitOps Repo') {
             steps {
                 echo "Pushing updated manifest tag to GitHub..."
-                sh """
-                    git config user.name "Jenkins CI"
-                    git config user.email "samson@sedintechnologies.com"
-                    git add kubernetes/backend-deployment.yaml
-                    git commit -m "ci(argocd): update backend image tag to backend:${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                    git push origin HEAD:main
-                """
+                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                    sh """
+                        git config user.name "Jenkins CI"
+                        git config user.email "samson@sedintechnologies.com"
+                        git add kubernetes/backend-deployment.yaml
+                        git commit -m "ci(argocd): update backend image tag to backend:${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
+                        git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git HEAD:main
+                    """
+                }
             }
         }
     }
