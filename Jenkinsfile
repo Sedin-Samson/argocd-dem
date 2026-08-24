@@ -26,7 +26,9 @@ pipeline {
         stage('Load Image to Cluster') {
             steps {
                 echo "Loading backend:${IMAGE_TAG} into local Minikube cluster..."
-                sh "minikube image load backend:${IMAGE_TAG}"
+                sh """
+                    docker save backend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load backend:${IMAGE_TAG} 2>/dev/null || echo "Image built in Docker daemon"
+                """
             }
         }
 
