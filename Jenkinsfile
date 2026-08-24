@@ -48,10 +48,10 @@ pipeline {
                 echo "Pushing updated manifest tag to GitHub..."
                 sh """
                     git config user.name "Jenkins CI"
-                    git config user.email "jenkins@sedintechnologies.com"
+                    git config user.email "samson@sedintechnologies.com"
                     git add kubernetes/backend-deployment.yaml
                     git commit -m "ci(argocd): update backend image tag to backend:${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                    git push origin main
+                    git push origin HEAD:main
                 """
             }
         }
