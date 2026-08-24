@@ -2,6 +2,8 @@ pipeline {
     agent any
 
     environment {
+        // Path environment variable for docker and minikube CLI
+        PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
         // Dynamic build version tag based on Jenkins Build Number
         IMAGE_TAG = "v1.0.${BUILD_NUMBER}"
         GIT_REPO_URL = "git@github.com:Sedin-Samson/argocd-dem.git"
