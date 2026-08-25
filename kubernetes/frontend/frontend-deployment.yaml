@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: frontend
-        image: frontend:v1.0.13
+        image: 156916773321.dkr.ecr.ap-south-1.amazonaws.com/argocd-demo-frontend:v1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 80

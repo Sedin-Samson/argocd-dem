@@ -5,7 +5,7 @@ pipeline {
         choice(
             name: 'SERVICE_TO_BUILD',
             choices: ['ALL', 'backend', 'frontend'],
-            description: 'Select which service microservice to build & deploy'
+            description: 'Select which microservice to build & deploy to AWS ECR'
         )
         string(
             name: 'RELEASE_TAG',
@@ -15,10 +15,16 @@ pipeline {
     }
 
     environment {
-        // Path environment variable for docker and minikube CLI
-        PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
-        // Dynamic build version tag based on parameter or build number
-        IMAGE_TAG = "${params.RELEASE_TAG != 'v1.0.0' ? params.RELEASE_TAG : 'v1.0.' + BUILD_NUMBER}"
+        // AWS & ECR Configuration
+        AWS_REGION      = "ap-south-1"
+        AWS_ACCOUNT_ID  = "156916773321"
+        ECR_REGISTRY    = "156916773321.dkr.ecr.ap-south-1.amazonaws.com"
+        
+        BACKEND_ECR     = "156916773321.dkr.ecr.ap-south-1.amazonaws.com/argocd-demo-backend"
+        FRONTEND_ECR    = "156916773321.dkr.ecr.ap-south-1.amazonaws.com/argocd-demo-frontend"
+
+        PATH            = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
+        IMAGE_TAG       = "${params.RELEASE_TAG != 'v1.0.0' ? params.RELEASE_TAG : 'v1.0.' + BUILD_NUMBER}"
     }
 
     stages {
@@ -28,47 +34,58 @@ pipeline {
             }
         }
 
-        stage('Build Backend Microservice') {
+        stage('AWS ECR Login') {
+            steps {
+                echo "🔐 Logging into AWS Elastic Container Registry (${ECR_REGISTRY})..."
+                sh """
+                    aws ecr get-login-password --region ${AWS_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY} || true
+                """
+            }
+        }
+
+        stage('Build & Push Backend Microservice') {
             when {
                 expression { params.SERVICE_TO_BUILD == 'ALL' || params.SERVICE_TO_BUILD == 'backend' }
             }
             steps {
                 echo "=================================================="
-                echo " 🛠️ Building Backend Docker Image: backend:${IMAGE_TAG}"
+                echo " 🛠️ Building Backend Docker Image: ${BACKEND_ECR}:${IMAGE_TAG}"
                 echo "=================================================="
-                sh "docker build -t backend:${IMAGE_TAG} ./backend"
+                sh "docker build -t ${BACKEND_ECR}:${IMAGE_TAG} -t ${BACKEND_ECR}:latest ./backend"
 
-                echo "📥 Loading backend:${IMAGE_TAG} into local Minikube cluster..."
+                echo "📤 Pushing Backend Docker Image to AWS ECR..."
                 sh """
-                    docker save backend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load backend:${IMAGE_TAG} 2>/dev/null || echo "Image ready in Docker daemon"
+                    docker push ${BACKEND_ECR}:${IMAGE_TAG}
+                    docker push ${BACKEND_ECR}:latest
                 """
 
                 echo "⚙️ Updating backend deployment manifest tag..."
                 sh """
-                    sed -i.bak "s|image: backend:.*|image: backend:${IMAGE_TAG}|g" kubernetes/backend/backend-deployment.yaml
+                    sed -i.bak "s|image: .*|image: ${BACKEND_ECR}:${IMAGE_TAG}|g" kubernetes/backend/backend-deployment.yaml
                     rm -f kubernetes/backend/backend-deployment.yaml.bak
                 """
             }
         }
 
-        stage('Build Frontend Microservice') {
+        stage('Build & Push Frontend Microservice') {
             when {
                 expression { params.SERVICE_TO_BUILD == 'ALL' || params.SERVICE_TO_BUILD == 'frontend' }
             }
             steps {
                 echo "=================================================="
-                echo " 🛠️ Building Frontend Docker Image: frontend:${IMAGE_TAG}"
+                echo " 🛠️ Building Frontend Docker Image: ${FRONTEND_ECR}:${IMAGE_TAG}"
                 echo "=================================================="
-                sh "docker build -t frontend:${IMAGE_TAG} ./frontend"
+                sh "docker build -t ${FRONTEND_ECR}:${IMAGE_TAG} -t ${FRONTEND_ECR}:latest ./frontend"
 
-                echo "📥 Loading frontend:${IMAGE_TAG} into local Minikube cluster..."
+                echo "📤 Pushing Frontend Docker Image to AWS ECR..."
                 sh """
-                    docker save frontend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load frontend:${IMAGE_TAG} 2>/dev/null || echo "Image ready in Docker daemon"
+                    docker push ${FRONTEND_ECR}:${IMAGE_TAG}
+                    docker push ${FRONTEND_ECR}:latest
                 """
 
                 echo "⚙️ Updating frontend deployment manifest tag..."
                 sh """
-                    sed -i.bak "s|image: frontend:.*|image: frontend:${IMAGE_TAG}|g" kubernetes/frontend/frontend-deployment.yaml
+                    sed -i.bak "s|image: .*|image: ${FRONTEND_ECR}:${IMAGE_TAG}|g" kubernetes/frontend/frontend-deployment.yaml
                     rm -f kubernetes/frontend/frontend-deployment.yaml.bak
                 """
             }
@@ -76,16 +93,26 @@ pipeline {
 
         stage('Commit & Push Manifests and Git Release Tag') {
             steps {
-                echo "📤 Pushing updated manifests and Git tag ${IMAGE_TAG} to GitHub..."
+                echo "📤 Pushing updated ECR manifests and Git tag to GitHub..."
                 withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "samson@sedintechnologies.com"
                         git add kubernetes/
-                        git commit -m "release(${params.SERVICE_TO_BUILD}): update image tags to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                        git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG} generated by Jenkins" || true
+                        git commit -m "release(${params.SERVICE_TO_BUILD}): update ECR image tags to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
+                        
+                        if [ "${params.SERVICE_TO_BUILD}" = "backend" ]; then
+                            git tag -a "backend-${IMAGE_TAG}" -m "Backend ECR release backend-${IMAGE_TAG}" || true
+                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "backend-${IMAGE_TAG}" || true
+                        elif [ "${params.SERVICE_TO_BUILD}" = "frontend" ]; then
+                            git tag -a "frontend-${IMAGE_TAG}" -m "Frontend ECR release frontend-${IMAGE_TAG}" || true
+                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "frontend-${IMAGE_TAG}" || true
+                        else
+                            git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG}" || true
+                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "${IMAGE_TAG}" || true
+                        fi
+                        
                         git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git HEAD:main
-                        git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "${IMAGE_TAG}" || true
                     """
                 }
             }
@@ -94,7 +121,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD Pipeline Completed Successfully for Service: ${params.SERVICE_TO_BUILD} with Tag: ${IMAGE_TAG}!"
+            echo "✅ AWS ECR CI/CD Pipeline Completed Successfully for Service: ${params.SERVICE_TO_BUILD} with Tag: ${IMAGE_TAG}!"
         }
         failure {
             echo "❌ Pipeline failed! Please check logs."

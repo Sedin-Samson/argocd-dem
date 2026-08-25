@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: backend
-        image: backend:v1.0.10
+        image: 156916773321.dkr.ecr.ap-south-1.amazonaws.com/argocd-demo-backend:v1.0.0
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
