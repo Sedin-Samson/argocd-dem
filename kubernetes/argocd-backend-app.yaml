@@ -7,7 +7,7 @@ spec:
   project: default
   source:
     repoURL: 'https://github.com/Sedin-Samson/argocd-dem.git'
-    targetRevision: 'backend-v1.0.0'
+    targetRevision: main
     path: 'kubernetes/backend'
   destination:
     server: 'https://kubernetes.default.svc'

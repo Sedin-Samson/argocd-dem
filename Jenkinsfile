@@ -1,12 +1,24 @@
 pipeline {
     agent any
 
+    parameters {
+        choice(
+            name: 'SERVICE_TO_BUILD',
+            choices: ['ALL', 'backend', 'frontend'],
+            description: 'Select which service microservice to build & deploy'
+        )
+        string(
+            name: 'RELEASE_TAG',
+            defaultValue: 'v1.0.0',
+            description: 'Specify the release version tag (e.g. v1.0.1, v1.0.2)'
+        )
+    }
+
     environment {
         // Path environment variable for docker and minikube CLI
         PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
-        // Dynamic build version tag based on Jenkins Build Number
-        IMAGE_TAG = "v1.0.${BUILD_NUMBER}"
-        GIT_REPO_URL = "git@github.com:Sedin-Samson/argocd-dem.git"
+        // Dynamic build version tag based on parameter or build number
+        IMAGE_TAG = "${params.RELEASE_TAG != 'v1.0.0' ? params.RELEASE_TAG : 'v1.0.' + BUILD_NUMBER}"
     }
 
     stages {
@@ -16,25 +28,22 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build Backend Microservice') {
+            when {
+                expression { params.SERVICE_TO_BUILD == 'ALL' || params.SERVICE_TO_BUILD == 'backend' }
+            }
             steps {
-                echo "Building Backend Docker Image with tag: backend:${IMAGE_TAG}"
+                echo "=================================================="
+                echo " 🛠️ Building Backend Docker Image: backend:${IMAGE_TAG}"
+                echo "=================================================="
                 sh "docker build -t backend:${IMAGE_TAG} ./backend"
-            }
-        }
 
-        stage('Load Image to Cluster') {
-            steps {
-                echo "Loading backend:${IMAGE_TAG} into local Minikube cluster..."
+                echo "📥 Loading backend:${IMAGE_TAG} into local Minikube cluster..."
                 sh """
-                    docker save backend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load backend:${IMAGE_TAG} 2>/dev/null || echo "Image built in Docker daemon"
+                    docker save backend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load backend:${IMAGE_TAG} 2>/dev/null || echo "Image ready in Docker daemon"
                 """
-            }
-        }
 
-        stage('Update Kubernetes Manifest') {
-            steps {
-                echo "Updating backend deployment image tag to backend:${IMAGE_TAG}"
+                echo "⚙️ Updating backend deployment manifest tag..."
                 sh """
                     sed -i.bak "s|image: backend:.*|image: backend:${IMAGE_TAG}|g" kubernetes/backend/backend-deployment.yaml
                     rm -f kubernetes/backend/backend-deployment.yaml.bak
@@ -42,18 +51,41 @@ pipeline {
             }
         }
 
-        stage('Commit & Push Manifest and Git Release Tag') {
+        stage('Build Frontend Microservice') {
+            when {
+                expression { params.SERVICE_TO_BUILD == 'ALL' || params.SERVICE_TO_BUILD == 'frontend' }
+            }
             steps {
-                echo "Creating & Pushing Git Release Tag backend-${IMAGE_TAG} to GitHub..."
+                echo "=================================================="
+                echo " 🛠️ Building Frontend Docker Image: frontend:${IMAGE_TAG}"
+                echo "=================================================="
+                sh "docker build -t frontend:${IMAGE_TAG} ./frontend"
+
+                echo "📥 Loading frontend:${IMAGE_TAG} into local Minikube cluster..."
+                sh """
+                    docker save frontend:${IMAGE_TAG} | docker exec -i minikube ctr -n k8s.io images import - 2>/dev/null || minikube image load frontend:${IMAGE_TAG} 2>/dev/null || echo "Image ready in Docker daemon"
+                """
+
+                echo "⚙️ Updating frontend deployment manifest tag..."
+                sh """
+                    sed -i.bak "s|image: frontend:.*|image: frontend:${IMAGE_TAG}|g" kubernetes/frontend/frontend-deployment.yaml
+                    rm -f kubernetes/frontend/frontend-deployment.yaml.bak
+                """
+            }
+        }
+
+        stage('Commit & Push Manifests and Git Release Tag') {
+            steps {
+                echo "📤 Pushing updated manifests and Git tag ${IMAGE_TAG} to GitHub..."
                 withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "samson@sedintechnologies.com"
-                        git add kubernetes/backend/backend-deployment.yaml
-                        git commit -m "release: update backend image tag to backend:${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-                        git tag -a "backend-${IMAGE_TAG}" -m "Backend release backend-${IMAGE_TAG} generated by Jenkins" || true
+                        git add kubernetes/
+                        git commit -m "release(${params.SERVICE_TO_BUILD}): update image tags to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
+                        git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG} generated by Jenkins" || true
                         git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git HEAD:main
-                        git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "backend-${IMAGE_TAG}"
+                        git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "${IMAGE_TAG}" || true
                     """
                 }
             }
@@ -62,7 +94,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ CI/CD Pipeline Completed Successfully! Argo CD will now detect and sync backend:${IMAGE_TAG}."
+            echo "✅ CI/CD Pipeline Completed Successfully for Service: ${params.SERVICE_TO_BUILD} with Tag: ${IMAGE_TAG}!"
         }
         failure {
             echo "❌ Pipeline failed! Please check logs."
