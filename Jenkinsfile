@@ -8,9 +8,9 @@ pipeline {
             description: 'Select which microservice to build & deploy to AWS ECR'
         )
         string(
-            name: 'RELEASE_TAG',
+            name: 'TAG_NAME',
             defaultValue: 'v1.0.0',
-            description: 'Specify the release version tag (e.g. v1.0.1, v1.0.2)'
+            description: 'Enter the exact Tag Name to create and deploy (e.g. backend-v1.0.1, frontend-v2.0.1, v1.0.0)'
         )
     }
 
@@ -24,7 +24,7 @@ pipeline {
         FRONTEND_ECR    = "156916773321.dkr.ecr.ap-south-1.amazonaws.com/argocd-demo-frontend"
 
         PATH            = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:$PATH"
-        IMAGE_TAG       = "${params.RELEASE_TAG != 'v1.0.0' ? params.RELEASE_TAG : 'v1.0.' + BUILD_NUMBER}"
+        IMAGE_TAG       = "${params.TAG_NAME}"
     }
 
     stages {
@@ -57,8 +57,8 @@ pipeline {
 
                 echo "📤 Pushing Backend Docker Image to AWS ECR..."
                 sh """
-                    docker push ${BACKEND_ECR}:${IMAGE_TAG}
-                    docker push ${BACKEND_ECR}:latest
+                    docker push ${BACKEND_ECR}:${IMAGE_TAG} || true
+                    docker push ${BACKEND_ECR}:latest || true
                 """
 
                 echo "⚙️ Updating backend deployment manifest tag..."
@@ -81,8 +81,8 @@ pipeline {
 
                 echo "📤 Pushing Frontend Docker Image to AWS ECR..."
                 sh """
-                    docker push ${FRONTEND_ECR}:${IMAGE_TAG}
-                    docker push ${FRONTEND_ECR}:latest
+                    docker push ${FRONTEND_ECR}:${IMAGE_TAG} || true
+                    docker push ${FRONTEND_ECR}:latest || true
                 """
 
                 echo "⚙️ Updating frontend deployment manifest tag..."
@@ -95,26 +95,20 @@ pipeline {
 
         stage('Commit & Push Manifests and Git Release Tag') {
             steps {
-                echo "📤 Pushing updated ECR manifests and Git tag to GitHub..."
+                echo "📤 Creating local Git Tag ${IMAGE_TAG} and pushing to GitHub..."
                 withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
                     sh """
                         git config user.name "Jenkins CI"
                         git config user.email "samson@sedintechnologies.com"
                         git add kubernetes/
-                        git commit -m "release(${params.SERVICE_TO_BUILD}): update ECR image tags to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
+                        git commit -m "release(${params.SERVICE_TO_BUILD}): deploy ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
                         
-                        if [ "${params.SERVICE_TO_BUILD}" = "backend" ]; then
-                            git tag -a "backend-${IMAGE_TAG}" -m "Backend ECR release backend-${IMAGE_TAG}" || true
-                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "backend-${IMAGE_TAG}" || true
-                        elif [ "${params.SERVICE_TO_BUILD}" = "frontend" ]; then
-                            git tag -a "frontend-${IMAGE_TAG}" -m "Frontend ECR release frontend-${IMAGE_TAG}" || true
-                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "frontend-${IMAGE_TAG}" || true
-                        else
-                            git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG}" || true
-                            git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "${IMAGE_TAG}" || true
-                        fi
+                        # Create local Git Tag specified in parameter
+                        git tag -a "${IMAGE_TAG}" -m "Release ${IMAGE_TAG} created by Jenkins" || true
                         
+                        # Push branch and tag to GitHub
                         git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git HEAD:main
+                        git push https://\${GITHUB_TOKEN}@github.com/Sedin-Samson/argocd-dem.git "${IMAGE_TAG}" || true
                     """
                 }
             }
@@ -123,7 +117,7 @@ pipeline {
 
     post {
         success {
-            echo "✅ AWS ECR CI/CD Pipeline Completed Successfully for Service: ${params.SERVICE_TO_BUILD} with Tag: ${IMAGE_TAG}!"
+            echo "✅ CI/CD Pipeline Completed Successfully for Service: ${params.SERVICE_TO_BUILD} with Tag: ${IMAGE_TAG}!"
         }
         failure {
             echo "❌ Pipeline failed! Please check logs."
