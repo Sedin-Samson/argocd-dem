@@ -20,8 +20,8 @@ def read_root():
 @app.get("/api/hello")
 def get_hello():
     return {
-        "message": "Hello from Manual Sync Backend v3",
-        "version": "v3",
+        "message": "Hello from AWS ECR Backend v1.0.18",
+        "version": "v1.0.18",
         "timestamp": time.time(),
         "status": "success"
     }
