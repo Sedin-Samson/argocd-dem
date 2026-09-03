@@ -22,7 +22,14 @@ argocd/
     ├── backend-service.yaml
     ├── frontend-deployment.yaml
     ├── frontend-service.yaml
-    └── argocd-application.yaml
+    ├── argocd-frontend-app.yaml
+    ├── argocd-backend-app.yaml
+    ├── backend/
+    │   ├── backend-deployment.yaml
+    │   └── backend-service.yaml
+    └── frontend/
+        ├── frontend-deployment.yaml
+        └── frontend-service.yaml
 ```
 
 ---
